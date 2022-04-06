@@ -1,0 +1,16 @@
+[package]
+name = "comments"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.5"
+axum-macros = "0.2"
+async-graphql = "3"
+async-graphql-axum = "3"
+eyre = "0.6"
+sqlx ={ version = "0.5", features = ["sqlite", "runtime-tokio-native-tls"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
