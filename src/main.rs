@@ -22,7 +22,7 @@ async fn main() -> eyre::Result<()> {
         .locking_mode(SqliteLockingMode::Exclusive);
     let pool = Pool::connect_with(options).await?;
     let router = Router::new()
-        .route("/comments", get(comments))
+        .route("/comments", get(list_comments))
         .layer(Extension(pool));
     let addr = SocketAddr::from(([127,0,0,1],4000));
     Server::bind(&addr)

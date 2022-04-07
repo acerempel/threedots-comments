@@ -50,7 +50,7 @@ impl FromRow<'_, SqliteRow> for Comment{
 }
 
 #[debug_handler]
-pub async fn comments(pool: Extension<Pool>, post_url: Query<String>) -> Result<Json<Vec<Comment>>, Error> {
+pub async fn list_comments(pool: Extension<Pool>, page_url: Query<String>) -> Result<Json<Vec<Comment>>, Error> {
     let mut conn = pool.acquire().await?;
     let comments = query_as(
         "SELECT author, date, content_type, content FROM comments"
