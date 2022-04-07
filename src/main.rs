@@ -7,7 +7,7 @@ use axum::{Router, Server, Extension};
 use axum::routing::get;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
 
-use self::comment::comments;
+use self::comment::list_comments;
 use self::database::Pool;
 
 mod comment;
@@ -21,6 +21,7 @@ async fn main() -> eyre::Result<()> {
         .create_if_missing(true)
         .locking_mode(SqliteLockingMode::Exclusive);
     let pool = Pool::connect_with(options).await?;
+    database::init(&pool).await?;
     let router = Router::new()
         .route("/comments", get(list_comments))
         .layer(Extension(pool));

@@ -14,6 +14,7 @@ pub struct Comment {
     date: String,
     content: String,
     content_type: ContentType,
+    page_url: String,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
@@ -44,6 +45,7 @@ impl FromRow<'_, SqliteRow> for Comment{
             date: row.get("date"),
             content: row.get("content"),
             content_type: row.get("content_type"),
+            page_url: row.get("page_url"),
         };
         Ok(comment)
     }
@@ -53,7 +55,7 @@ impl FromRow<'_, SqliteRow> for Comment{
 pub async fn list_comments(pool: Extension<Pool>, page_url: Query<String>) -> Result<Json<Vec<Comment>>, Error> {
     let mut conn = pool.acquire().await?;
     let comments = query_as(
-        "SELECT author, date, content_type, content FROM comments"
-    ).fetch_all(&mut conn).await?;
+        "SELECT author, date, content_type, content, page_url FROM comments WHERE page_url = ?"
+    ).bind(page_url.as_str()).fetch_all(&mut conn).await?;
     Ok(Json(comments))
 }
