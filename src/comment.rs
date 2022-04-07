@@ -1,11 +1,14 @@
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
-use axum::Extension;
+use axum::{Extension, Json};
+use axum::extract::Query;
+use axum_macros::debug_handler;
+use serde::Serialize;
 use sqlx::sqlite::{SqliteRow, SqliteValueRef, SqliteTypeInfo};
-use sqlx::{FromRow, Row, Sqlite, Decode};
+use sqlx::{FromRow, Row, Sqlite, Decode, query_as};
 
-use crate::query::Schema;
+use crate::database::Pool;
+use crate::error::Error;
 
-#[derive(graphql::SimpleObject)]
+#[derive(Debug, Serialize)]
 pub struct Comment {
     author: String,
     date: String,
@@ -13,7 +16,7 @@ pub struct Comment {
     content_type: ContentType,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, graphql::Enum)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
 enum ContentType {
     Plain, Html,
 }
@@ -44,4 +47,13 @@ impl FromRow<'_, SqliteRow> for Comment{
         };
         Ok(comment)
     }
+}
+
+#[debug_handler]
+pub async fn comments(pool: Extension<Pool>, post_url: Query<String>) -> Result<Json<Vec<Comment>>, Error> {
+    let mut conn = pool.acquire().await?;
+    let comments = query_as(
+        "SELECT author, date, content_type, content FROM comments"
+    ).fetch_all(&mut conn).await?;
+    Ok(Json(comments))
 }
