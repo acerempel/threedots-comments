@@ -1,14 +1,14 @@
 use axum::{Extension, Json};
 use axum::extract::Query;
 use axum_macros::debug_handler;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use sqlx::sqlite::{SqliteRow, SqliteValueRef, SqliteTypeInfo};
-use sqlx::{FromRow, Row, Sqlite, Decode, query_as};
+use sqlx::{FromRow, Row, Sqlite, Decode, query_as, Executor, query};
 
 use crate::database::Pool;
 use crate::error::Error;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Comment {
     author: String,
     date: String,
@@ -17,9 +17,19 @@ pub struct Comment {
     page_url: String,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 enum ContentType {
     Plain, Html,
+}
+
+impl<'r> sqlx::Encode<'r, Sqlite> for ContentType {
+    fn encode_by_ref(&self, buf: &mut <Sqlite as sqlx::database::HasArguments<'r>>::ArgumentBuffer) -> sqlx::encode::IsNull {
+        let int: i64 = match self {
+            &ContentType::Plain => 0,
+            &ContentType::Html => 1,
+        };
+        int.encode_by_ref(buf)
+    } 
 }
 
 impl<'r> sqlx::Decode<'r, Sqlite> for ContentType {
@@ -58,4 +68,17 @@ pub async fn list_comments(pool: Extension<Pool>, page_url: Query<String>) -> Re
         "SELECT author, date, content_type, content, page_url FROM comments WHERE page_url = ?"
     ).bind(page_url.as_str()).fetch_all(&mut conn).await?;
     Ok(Json(comments))
+}
+
+#[debug_handler]
+pub async fn new_comment(pool: Extension<Pool>, comment: Json<Comment>) -> Result<(), Error> {
+    let mut conn = pool.acquire().await?;
+    query( "INSERT INTO comments (author, date, content_type, content, page_url)
+            VALUES (?, ?, ?, ?, ?)")
+        .bind(&comment.author).bind(&comment.date)
+        .bind(&comment.content_type).bind(&comment.content)
+        .bind(&comment.page_url)
+        .execute(&mut conn)
+        .await?;
+    Ok(())
 }

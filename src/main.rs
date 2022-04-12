@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use argh::FromArgs;
 use axum::{Router, Server, Extension};
 use axum::routing::get;
+use comment::new_comment;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
 
 use self::comment::list_comments;
@@ -26,7 +27,7 @@ async fn main() -> eyre::Result<()> {
     let pool = Pool::connect_with(conn_opts).await?;
     database::init(&pool).await?;
     let router = Router::new()
-        .route("/comments", get(list_comments))
+        .route("/comments", get(list_comments).post(new_comment))
         .layer(Extension(pool));
     let addr = SocketAddr::from((options.address,options.port));
     Server::bind(&addr)
