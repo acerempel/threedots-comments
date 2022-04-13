@@ -10,6 +10,10 @@ argh = "0.1"
 axum = "0.5"
 axum-macros = "0.2"
 eyre = "0.6"
-sqlx ={ version = "0.5", features = ["sqlite", "runtime-tokio-native-tls"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
+
+[dependencies.sqlx]
+version = "0.5"
+features = ["sqlite", "runtime-tokio-rustls"]
+default-features = false
