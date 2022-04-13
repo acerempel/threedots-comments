@@ -3,7 +3,7 @@ use axum::extract::Query;
 use axum_macros::debug_handler;
 use serde::{Serialize, Deserialize};
 use sqlx::sqlite::{SqliteRow, SqliteValueRef, SqliteTypeInfo};
-use sqlx::{FromRow, Row, Sqlite, Decode, query_as, Executor, query};
+use sqlx::{FromRow, Row, Sqlite, Decode, query_as, Executor, query, TypeInfo};
 
 use crate::database::Pool;
 use crate::error::Error;
@@ -29,7 +29,7 @@ impl<'r> sqlx::Encode<'r, Sqlite> for ContentType {
             &ContentType::Html => 1,
         };
         int.encode_by_ref(buf)
-    } 
+    }
 }
 
 impl<'r> sqlx::Decode<'r, Sqlite> for ContentType {
@@ -45,6 +45,10 @@ impl<'r> sqlx::Decode<'r, Sqlite> for ContentType {
 impl sqlx::Type<Sqlite> for ContentType {
     fn type_info() -> SqliteTypeInfo {
         i64::type_info()
+    }
+
+    fn compatible(ty: &<Sqlite as sqlx::Database>::TypeInfo) -> bool {
+        ! ty.is_null() && ty.name() == "INTEGER"
     }
 }
 
@@ -62,20 +66,25 @@ impl FromRow<'_, SqliteRow> for Comment{
 }
 
 #[debug_handler]
-pub async fn list_comments(pool: Extension<Pool>, page_url: Query<String>) -> Result<Json<Vec<Comment>>, Error> {
+pub async fn list_comments(pool: Extension<Pool>, data: Query<CommentRequest>) -> Result<Json<Vec<Comment>>, Error> {
     let mut conn = pool.acquire().await?;
     let comments = query_as("
         SELECT author, date, content_type, content, url as page_url
         FROM comments JOIN pages ON comments.page_id = pages.id
         WHERE url = ?
-    ").bind(page_url.as_str()).fetch_all(&mut conn).await?;
+    ").bind(data.page_url.as_str()).fetch_all(&mut conn).await?;
     Ok(Json(comments))
+}
+
+#[derive(Deserialize, Debug)]
+pub struct CommentRequest {
+    page_url: String,
 }
 
 #[debug_handler]
 pub async fn new_comment(pool: Extension<Pool>, comment: Json<Comment>) -> Result<(), Error> {
     let mut conn = pool.acquire().await?;
-    let page_id: i64 = query("INSERT INTO pages (url) VALUES ? ON CONFLICT (url) DO NOTHING RETURNING id")
+    let page_id: i64 = query("INSERT INTO pages (url) VALUES (?) ON CONFLICT (url) DO NOTHING RETURNING id")
         .bind(&comment.page_url)
         .fetch_one(&mut conn)
         .await?
