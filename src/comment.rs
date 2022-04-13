@@ -64,20 +64,27 @@ impl FromRow<'_, SqliteRow> for Comment{
 #[debug_handler]
 pub async fn list_comments(pool: Extension<Pool>, page_url: Query<String>) -> Result<Json<Vec<Comment>>, Error> {
     let mut conn = pool.acquire().await?;
-    let comments = query_as(
-        "SELECT author, date, content_type, content, page_url FROM comments WHERE page_url = ?"
-    ).bind(page_url.as_str()).fetch_all(&mut conn).await?;
+    let comments = query_as("
+        SELECT author, date, content_type, content, url as page_url
+        FROM comments JOIN pages ON comments.page_id = pages.id
+        WHERE url = ?
+    ").bind(page_url.as_str()).fetch_all(&mut conn).await?;
     Ok(Json(comments))
 }
 
 #[debug_handler]
 pub async fn new_comment(pool: Extension<Pool>, comment: Json<Comment>) -> Result<(), Error> {
     let mut conn = pool.acquire().await?;
-    query( "INSERT INTO comments (author, date, content_type, content, page_url)
+    let page_id: i64 = query("INSERT INTO pages (url) VALUES ? ON CONFLICT (url) DO NOTHING RETURNING id")
+        .bind(&comment.page_url)
+        .fetch_one(&mut conn)
+        .await?
+        .get(0);
+    query( "INSERT INTO comments (author, date, content_type, content, page_id)
             VALUES (?, ?, ?, ?, ?)")
         .bind(&comment.author).bind(&comment.date)
         .bind(&comment.content_type).bind(&comment.content)
-        .bind(&comment.page_url)
+        .bind(page_id)
         .execute(&mut conn)
         .await?;
     Ok(())
