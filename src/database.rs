@@ -19,6 +19,7 @@ pub async fn init(pool: &Pool) -> Result<(), eyre::Report> {
                 page_id INTEGER NOT NULL REFERENCES pages(id)
             );
             CREATE INDEX comments_by_page ON comments(page_id);
+            PRAGMA user_version = 1;
         ").await?;
     }
     Ok(())
