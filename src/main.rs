@@ -9,6 +9,9 @@ use axum::{Router, Server, Extension};
 use axum::routing::get;
 use comment::new_comment;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
+use tower_http::trace::TraceLayer;
+use tracing::{Instrument, info_span};
+use tracing_subscriber;
 
 use self::comment::list_comments;
 use self::database::Pool;
@@ -19,16 +22,20 @@ mod error;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    tracing_subscriber::fmt::init();
     let options: Options = argh::from_env();
     let conn_opts = SqliteConnectOptions::new()
         .filename(options.db_file)
         .create_if_missing(true)
         .locking_mode(SqliteLockingMode::Exclusive);
-    let pool = Pool::connect_with(conn_opts).await?;
-    database::init(&pool).await?;
+    let pool = Pool::connect_with(conn_opts)
+        .instrument(info_span!("creating connection pool")).await?;
+    database::init(&pool)
+        .instrument(info_span!("initializing database")).await?;
     let router = Router::new()
         .route("/comments", get(list_comments).post(new_comment))
-        .layer(Extension(pool));
+        .layer(Extension(pool))
+        .layer(TraceLayer::new_for_http());
     let addr = SocketAddr::from((options.address,options.port));
     Server::bind(&addr)
         .serve(router.into_make_service())
