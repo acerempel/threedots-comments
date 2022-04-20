@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use argh::FromArgs;
 use axum::{Router, Extension};
 use axum::routing::get;
-use axum_server::HttpConfig;
 use axum_server::tls_rustls::RustlsConfig;
 use comment::new_comment;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
@@ -38,10 +37,7 @@ async fn main() -> eyre::Result<()> {
     let addr = SocketAddr::from((options.address,options.port));
     let tls_config = RustlsConfig::from_pem_file(options.cert_file, options.key_file)
         .instrument(info_span!("loading TLS configuration")).await?;
-    // axum-server doesn't let me turn on hyper's http2 feature
-    let http_config = HttpConfig::new().http1_only(true).build();
     axum_server::bind_rustls(addr, tls_config)
-        .http_config(http_config)
         .serve(router.into_make_service())
         .await?;
     Ok(())
