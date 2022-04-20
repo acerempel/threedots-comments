@@ -1,0 +1,26 @@
+target_linux_musl = x86_64-unknown-linux-musl
+
+release = target/$target_linux_musl/release/comments
+debug = target/debug/comments
+
+rule rustc-musl
+    command = $
+        TARGET=$target_linux_musl $
+        CC=x86_64-linux-musl-gcc $
+        cargo build --release --target $target_linux_musl
+
+build $release: rustc-musl Cargo.lock Cargo.toml src/main.rs
+
+rule rustc
+    command = cargo build
+
+host = threedots-aws
+
+rule scp
+    command = scp -C $in $host:~/$out
+
+build comments: scp $release
+
+build $debug: rustc Cargo.lock Cargo.toml src/main.rs
+
+build comments-local: phony $debug
