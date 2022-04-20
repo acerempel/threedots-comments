@@ -98,9 +98,9 @@ pub(crate) async fn list_comments(
 
 fn access_control_header(origin: Origin) -> AccessControlAllowOrigin {
     if origin.hostname() == "threedots.ca" || origin.hostname().ends_with(".threedots.ca") {
-        AccessControlAllowOrigin::try_from(format!("{}{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
+        AccessControlAllowOrigin::try_from(format!("{}://{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
     } else if origin.hostname() == "reverent-euclid-2bfb78.netlify.app" || origin.hostname().ends_with("--reverent-euclid-2bfb78.netlify.app") {
-        AccessControlAllowOrigin::try_from(format!("{}{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
+        AccessControlAllowOrigin::try_from(format!("{}://{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
     } else {
         AccessControlAllowOrigin::NULL
     }
