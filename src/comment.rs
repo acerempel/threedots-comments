@@ -1,4 +1,8 @@
-use axum::{Extension, Json};
+use std::env;
+
+use axum::headers::{Origin, AccessControlAllowOrigin};
+use axum::response::{Html, IntoResponse};
+use axum::{Extension, Json, TypedHeader};
 use axum::extract::Query;
 use axum_macros::debug_handler;
 use serde::{Serialize, Deserialize};
@@ -65,15 +69,43 @@ impl FromRow<'_, SqliteRow> for Comment{
     }
 }
 
+pub(crate) enum CommentResponse {
+    Json(Json<Vec<Comment>>),
+    Html(Html<String>),
+}
+
+impl IntoResponse for CommentResponse {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            Self::Json(json) => json.into_response(),
+            Self::Html(html) => html.into_response(),
+        }
+    }
+}
+
 #[debug_handler]
-pub async fn list_comments(pool: Extension<Pool>, data: Query<CommentRequest>) -> Result<Json<Vec<Comment>>, Error> {
+pub(crate) async fn list_comments(
+    pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, data: Query<CommentRequest>
+) -> Result<impl IntoResponse, Error> {
     let mut conn = pool.acquire().await?;
     let comments = query_as("
         SELECT author, date, content_type, content, url as page_url
         FROM comments JOIN pages ON comments.page_id = pages.id
         WHERE url = ?
     ").bind(data.page_url.as_str()).fetch_all(&mut conn).await?;
-    Ok(Json(comments))
+    let response = CommentResponse::Json(Json(comments));
+    let acao_header = access_control_header(origin);
+    Ok((TypedHeader(acao_header), response))
+}
+
+fn access_control_header(origin: Origin) -> AccessControlAllowOrigin {
+    if origin.hostname() == "threedots.ca" || origin.hostname().ends_with(".threedots.ca") {
+        AccessControlAllowOrigin::try_from(format!("{}{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
+    } else if origin.hostname() == "reverent-euclid-2bfb78.netlify.app" || origin.hostname().ends_with("--reverent-euclid-2bfb78.netlify.app") {
+        AccessControlAllowOrigin::try_from(format!("{}{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
+    } else {
+        AccessControlAllowOrigin::NULL
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -82,7 +114,9 @@ pub struct CommentRequest {
 }
 
 #[debug_handler]
-pub async fn new_comment(pool: Extension<Pool>, comment: Json<Comment>) -> Result<(), Error> {
+pub(crate) async fn new_comment(
+    pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, comment: Json<Comment>
+) -> Result<impl IntoResponse, Error> {
     let mut conn = pool.acquire().await?;
     let page_id: i64 = query("INSERT INTO pages (url) VALUES (?) ON CONFLICT (url) DO NOTHING RETURNING id")
         .bind(&comment.page_url)
@@ -96,5 +130,5 @@ pub async fn new_comment(pool: Extension<Pool>, comment: Json<Comment>) -> Resul
         .bind(page_id)
         .execute(&mut conn)
         .await?;
-    Ok(())
+    Ok((TypedHeader(access_control_header(origin)), ()))
 }
