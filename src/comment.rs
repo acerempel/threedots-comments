@@ -1,5 +1,3 @@
-use std::env;
-
 use axum::headers::{Origin, AccessControlAllowOrigin};
 use axum::response::{Html, IntoResponse};
 use axum::{Extension, Json, TypedHeader};
@@ -7,7 +5,7 @@ use axum::extract::Query;
 use axum_macros::debug_handler;
 use serde::{Serialize, Deserialize};
 use sqlx::sqlite::{SqliteRow, SqliteValueRef, SqliteTypeInfo};
-use sqlx::{FromRow, Row, Sqlite, Decode, query_as, Executor, query, TypeInfo};
+use sqlx::{FromRow, Row, Sqlite, query_as, query, TypeInfo};
 
 use crate::database::Pool;
 use crate::error::Error;

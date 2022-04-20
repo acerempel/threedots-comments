@@ -1,4 +1,4 @@
-use sqlx::{query_as, Executor, query, Row};
+use sqlx::{Executor, query, Row};
 
 pub type Pool = sqlx::SqlitePool;
 

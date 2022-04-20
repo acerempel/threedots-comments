@@ -1,11 +1,8 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-
 use std::net::{SocketAddr, IpAddr};
 use std::path::PathBuf;
 
 use argh::FromArgs;
-use axum::{Router, Server, Extension};
+use axum::{Router, Extension};
 use axum::routing::get;
 use axum_server::tls_rustls::RustlsConfig;
 use comment::new_comment;
