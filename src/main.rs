@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use argh::FromArgs;
 use axum::{Router, Server, Extension};
 use axum::routing::get;
+use axum_server::tls_rustls::RustlsConfig;
 use comment::new_comment;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
 use tower_http::trace::TraceLayer;
@@ -37,7 +38,9 @@ async fn main() -> eyre::Result<()> {
         .layer(Extension(pool))
         .layer(TraceLayer::new_for_http());
     let addr = SocketAddr::from((options.address,options.port));
-    Server::bind(&addr)
+    let tls_config = RustlsConfig::from_pem_file(options.cert_file, options.key_file)
+        .instrument(info_span!("loading TLS configuration")).await?;
+    axum_server::bind_rustls(addr, tls_config)
         .serve(router.into_make_service())
         .await?;
     Ok(())
@@ -55,4 +58,10 @@ struct Options {
     /// database filename
     #[argh(option, default = "PathBuf::from(\"threedots.db\")")]
     db_file: PathBuf,
+    /// certificate file (pem format)
+    #[argh(option)]
+    cert_file: PathBuf,
+    /// key file (pem format)
+    #[argh(option)]
+    key_file: PathBuf,
 }
