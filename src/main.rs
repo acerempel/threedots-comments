@@ -1,17 +1,21 @@
 use std::net::{SocketAddr, IpAddr};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use argh::FromArgs;
 use axum::{Router, Extension};
 use axum::routing::get;
 use axum_server::tls_rustls::RustlsConfig;
-use comment::new_comment;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
 use tower_http::trace::TraceLayer;
+use tracing::metadata::LevelFilter;
 use tracing::{Instrument, info_span};
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber;
 
-use self::comment::list_comments;
+use self::comment::{list_comments, new_comment};
 use self::database::Pool;
 
 mod comment;
@@ -20,8 +24,20 @@ mod error;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    tracing_subscriber::fmt::init();
     let options: Options = argh::from_env();
+
+    let journald_layer =
+        (options.log_dest == Logging::Journald)
+        .then(tracing_journald::layer).transpose()?;
+    let stdout_layer =
+        (options.log_dest == Logging::Fmt)
+        .then(|| tracing_subscriber::fmt::layer().with_span_events(FmtSpan::CLOSE));
+    let subscriber = tracing_subscriber::registry()
+        .with(stdout_layer)
+        .with(journald_layer)
+        .with(options.filter_logs);
+    tracing::subscriber::set_global_default(subscriber)?;
+
     let conn_opts = SqliteConnectOptions::new()
         .filename(options.db_file)
         .create_if_missing(true)
@@ -30,6 +46,7 @@ async fn main() -> eyre::Result<()> {
         .instrument(info_span!("creating connection pool")).await?;
     database::init(&pool)
         .instrument(info_span!("initializing database")).await?;
+
     let router = Router::new()
         .route("/comments", get(list_comments).post(new_comment))
         .layer(Extension(pool))
@@ -37,10 +54,27 @@ async fn main() -> eyre::Result<()> {
     let addr = SocketAddr::from((options.address,options.port));
     let tls_config = RustlsConfig::from_pem_file(options.cert_file, options.key_file)
         .instrument(info_span!("loading TLS configuration")).await?;
+
     axum_server::bind_rustls(addr, tls_config)
         .serve(router.into_make_service())
         .await?;
+
     Ok(())
+}
+
+#[derive(Eq, PartialEq)]
+enum Logging { Fmt, Journald, }
+
+impl FromStr for Logging {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stdout" => Ok(Self::Fmt),
+            "journald" => Ok(Self::Journald),
+            _ => Err(eyre::eyre!("not a kind of logging: {}", s))
+        }
+    }
+
+    type Err = eyre::Report;
 }
 
 /// Backend for threedots
@@ -49,16 +83,28 @@ struct Options {
     /// addresss to listen on
     #[argh(option, default = "IpAddr::from([127,0,0,1])")]
     address: IpAddr,
+
     /// port to listen on
     #[argh(option, default = "3000")]
     port: u16,
+
     /// database filename
     #[argh(option, default = "PathBuf::from(\"threedots.db\")")]
     db_file: PathBuf,
+
     /// certificate file (pem format)
     #[argh(option)]
     cert_file: PathBuf,
+
     /// key file (pem format)
     #[argh(option)]
     key_file: PathBuf,
+
+    /// log to where (journald, stdout)
+    #[argh(option, default = "Logging::Fmt")]
+    log_dest: Logging,
+
+    /// filter logs
+    #[argh(option, default = "Targets::new().with_default(LevelFilter::INFO)")]
+    filter_logs: Targets,
 }

@@ -10,14 +10,17 @@ argh = "0.1"
 axum = { version = "0.5", features = ["headers"] }
 axum-macros = "0.2"
 axum-server = { version = "0.4", features = ["tls-rustls"] }
+chrono = "0.4"
 eyre = "0.6"
+html-escape = "0.2"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.2", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3" }
+tracing-journald = "0.2"
 serde = { version = "1", features = ["derive"] }
 
 [dependencies.sqlx]
 version = "0.5"
-features = ["sqlite", "runtime-tokio-rustls"]
+features = ["sqlite", "runtime-tokio-rustls", "chrono"]
 default-features = false

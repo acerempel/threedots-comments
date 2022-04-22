@@ -3,6 +3,7 @@ use axum::response::{Html, IntoResponse};
 use axum::{Extension, Json, TypedHeader};
 use axum::extract::Query;
 use axum_macros::debug_handler;
+use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use sqlx::sqlite::{SqliteRow, SqliteValueRef, SqliteTypeInfo};
 use sqlx::{FromRow, Row, Sqlite, query_as, query, TypeInfo};
@@ -15,13 +16,23 @@ pub struct Comment {
     author: String,
     date: String,
     content: String,
+    page_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewComment {
+    author: String,
+    content: String,
     content_type: ContentType,
     page_url: String,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 enum ContentType {
-    Plain, Html,
+    #[serde(rename = "plain")]
+    Plain,
+    #[serde(rename = "html")]
+    Html,
 }
 
 impl<'r> sqlx::Encode<'r, Sqlite> for ContentType {
@@ -54,13 +65,12 @@ impl sqlx::Type<Sqlite> for ContentType {
     }
 }
 
-impl FromRow<'_, SqliteRow> for Comment{
+impl FromRow<'_, SqliteRow> for Comment {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let comment = Self {
             author: row.get("author"),
             date: row.get("date"),
             content: row.get("content"),
-            content_type: row.get("content_type"),
             page_url: row.get("page_url"),
         };
         Ok(comment)
@@ -87,7 +97,7 @@ pub(crate) async fn list_comments(
 ) -> Result<impl IntoResponse, Error> {
     let mut conn = pool.acquire().await?;
     let comments = query_as("
-        SELECT author, date, content_type, content, url as page_url
+        SELECT author, date, content, url as page_url
         FROM comments JOIN pages ON comments.page_id = pages.id
         WHERE url = ?
     ").bind(data.page_url.as_str()).fetch_all(&mut conn).await?;
@@ -113,20 +123,23 @@ pub struct CommentRequest {
 
 #[debug_handler]
 pub(crate) async fn new_comment(
-    pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, comment: Json<Comment>
+    pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, Json(mut comment): Json<NewComment>
 ) -> Result<impl IntoResponse, Error> {
+    if comment.content_type == ContentType::Plain {
+        comment.content = format!("<p>{}</p>", html_escape::encode_text(&comment.content));
+        comment.content_type = ContentType::Html;
+    }
     let mut conn = pool.acquire().await?;
     let page_id: i64 = query("INSERT INTO pages (url) VALUES (?) ON CONFLICT (url) DO NOTHING RETURNING id")
         .bind(&comment.page_url)
-        .fetch_one(&mut conn)
-        .await?
+        .fetch_one(&mut conn).await?
         .get(0);
-    query( "INSERT INTO comments (author, date, content_type, content, page_id)
-            VALUES (?, ?, ?, ?, ?)")
-        .bind(&comment.author).bind(&comment.date)
-        .bind(&comment.content_type).bind(&comment.content)
+    let date = Utc::now();
+    query( "INSERT INTO comments (author, date, content, page_id)
+            VALUES (?, ?, ?, ?)")
+        .bind(&comment.author).bind(&date)
+        .bind(&comment.content)
         .bind(page_id)
-        .execute(&mut conn)
-        .await?;
+        .execute(&mut conn).await?;
     Ok((TypedHeader(access_control_header(origin)), ()))
 }

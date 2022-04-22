@@ -22,5 +22,11 @@ pub async fn init(pool: &Pool) -> Result<(), eyre::Report> {
             PRAGMA user_version = 1;
         ").await?;
     }
+    if version < 2 {
+        conn.execute("
+            ALTER TABLE comments DROP COLUMN content_type;
+            PRAGMA user_version = 2;
+        ").await?;
+    }
     Ok(())
 }
