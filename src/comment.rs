@@ -130,6 +130,7 @@ pub(crate) async fn new_comment(
         comment.content = format!("<p>{}</p>", html_escape::encode_text(&comment.content));
         comment.content_type = ContentType::Html;
     }
+    let page_url = comment.page_url.trim_end_matches('/');
     let mut conn = pool.acquire().await?;
     info!(page_url, author = comment.author.as_str(), content = comment.content.as_str());
     query("INSERT INTO pages (url) VALUES (?) ON CONFLICT (url) DO NOTHING")
