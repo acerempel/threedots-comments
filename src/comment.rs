@@ -131,10 +131,13 @@ pub(crate) async fn new_comment(
         comment.content_type = ContentType::Html;
     }
     let mut conn = pool.acquire().await?;
-    let page_id: i64 = query("INSERT INTO pages (url) VALUES (?) ON CONFLICT (url) DO NOTHING RETURNING id")
+    info!(page_url, author = comment.author.as_str(), content = comment.content.as_str());
+    query("INSERT INTO pages (url) VALUES (?) ON CONFLICT (url) DO NOTHING")
         .bind(&comment.page_url)
-        .fetch_one(&mut conn).await?
-        .get(0);
+        .execute(&mut conn).await?;
+    let page_id: i64 = query("SELECT id FROM pages WHERE url = ?")
+        .bind(page_url)
+        .fetch_one(&mut conn).await?.get(0);
     let date = Utc::now();
     query( "INSERT INTO comments (author, date, content, page_id)
             VALUES (?, ?, ?, ?)")
