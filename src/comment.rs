@@ -3,18 +3,19 @@ use axum::response::{Html, IntoResponse};
 use axum::{Extension, Json, TypedHeader};
 use axum::extract::Query;
 use axum_macros::debug_handler;
-use chrono::Utc;
+use chrono::{Utc, DateTime};
 use serde::{Serialize, Deserialize};
 use sqlx::sqlite::{SqliteRow, SqliteValueRef, SqliteTypeInfo};
 use sqlx::{FromRow, Row, Sqlite, query_as, query, TypeInfo};
+use tracing::{instrument, info};
 
 use crate::database::Pool;
 use crate::error::Error;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct Comment {
     author: String,
-    date: String,
+    date: DateTime<Utc>,
     content: String,
     page_url: String,
 }
