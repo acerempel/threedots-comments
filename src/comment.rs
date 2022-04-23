@@ -93,6 +93,7 @@ impl IntoResponse for CommentResponse {
 }
 
 #[debug_handler]
+#[instrument]
 pub(crate) async fn list_comments(
     pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, data: Query<CommentRequest>
 ) -> Result<impl IntoResponse, Error> {
@@ -123,6 +124,7 @@ pub struct CommentRequest {
 }
 
 #[debug_handler]
+#[instrument]
 pub(crate) async fn new_comment(
     pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, Json(mut comment): Json<NewComment>
 ) -> Result<impl IntoResponse, Error> {
