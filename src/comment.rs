@@ -128,9 +128,16 @@ pub struct CommentRequest {
 pub(crate) async fn new_comment(
     pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, Json(mut comment): Json<NewComment>
 ) -> Result<impl IntoResponse, Error> {
-    if comment.content_type == ContentType::Plain {
-        comment.content = format!("<p>{}</p>", html_escape::encode_text(&comment.content));
-        comment.content_type = ContentType::Html;
+    match comment.content_type {
+        ContentType::Plain => {
+            comment.content = format!("<p>{}</p>", html_escape::encode_text(&comment.content));
+        },
+        ContentType::Html => {
+            comment.content = ammonia::Builder::default()
+                .rm_tags(&["img"])
+                .url_schemes(["http", "https", "mailto", "tel"].into())
+                .clean(&comment.content).to_string();
+        }
     }
     let page_url = comment.page_url.trim_end_matches('/');
     let mut conn = pool.acquire().await?;
