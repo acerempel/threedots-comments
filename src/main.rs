@@ -14,6 +14,7 @@ use tracing_subscriber::filter::Targets;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use self::comment::{list_comments, new_comment};
 use self::database::Pool;
@@ -31,12 +32,15 @@ async fn main() -> eyre::Result<()> {
         .then(tracing_journald::layer).transpose()?;
     let stdout_layer =
         (options.log_dest == Logging::Fmt)
-        .then(|| tracing_subscriber::fmt::layer().with_span_events(FmtSpan::CLOSE));
-    let subscriber = tracing_subscriber::registry()
+        .then(|| tracing_subscriber::fmt::layer()
+            .with_span_events(FmtSpan::CLOSE)
+            .map_event_format(|ef| ef.compact()));
+    tracing_subscriber::registry()
         .with(stdout_layer)
         .with(journald_layer)
-        .with(options.filter_logs);
-    tracing::subscriber::set_global_default(subscriber)?;
+        .with(options.filter_logs)
+        // This method also sets up the subscriber to consume `log` records
+        .try_init()?;
 
     let conn_opts = SqliteConnectOptions::new()
         .filename(options.db_file)
