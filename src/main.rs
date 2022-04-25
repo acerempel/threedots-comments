@@ -51,17 +51,23 @@ async fn main() -> eyre::Result<()> {
     database::init(&pool)
         .instrument(info_span!("initializing database")).await?;
 
-    let router = Router::new()
+    let service = Router::new()
         .route("/comments", get(list_comments).post(new_comment))
         .layer(Extension(pool))
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .into_make_service();
     let addr = SocketAddr::from((options.address,options.port));
-    let tls_config = RustlsConfig::from_pem_file(options.cert_file, options.key_file)
-        .instrument(info_span!("loading TLS configuration")).await?;
 
-    axum_server::bind_rustls(addr, tls_config)
-        .serve(router.into_make_service())
-        .await?;
+    if let (Some(cert_file), Some(key_file)) = (options.cert_file, options.key_file) {
+        let tls_config = RustlsConfig::from_pem_file(cert_file, key_file)
+            .instrument(info_span!("loading TLS configuration")).await?;
+        axum_server::bind_rustls(addr, tls_config).serve(service).await?;
+    } else {
+        if ! cfg!(debug_assertions) {
+            eyre::bail!("TLS certificate is required in release mode!");
+        }
+        axum::Server::bind(&addr).serve(service).await?;
+    }
 
     Ok(())
 }
@@ -98,11 +104,11 @@ struct Options {
 
     /// certificate file (pem format)
     #[argh(option)]
-    cert_file: PathBuf,
+    cert_file: Option<PathBuf>,
 
     /// key file (pem format)
     #[argh(option)]
-    key_file: PathBuf,
+    key_file: Option<PathBuf>,
 
     /// log to where (journald, stdout)
     #[argh(option, default = "Logging::Fmt")]

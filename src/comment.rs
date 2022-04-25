@@ -98,18 +98,22 @@ pub(crate) async fn list_comments(
     pool: Extension<Pool>, TypedHeader(origin): TypedHeader<Origin>, data: Query<CommentRequest>
 ) -> Result<impl IntoResponse, Error> {
     let mut conn = pool.acquire().await?;
+    let page_url = data.page_url.trim_end_matches('/');
+    info!(page_url);
     let comments = query_as("
         SELECT author, date, content, url as page_url
         FROM comments JOIN pages ON comments.page_id = pages.id
         WHERE url = ?
-    ").bind(data.page_url.as_str()).fetch_all(&mut conn).await?;
+    ").bind(page_url).fetch_all(&mut conn).await?;
     let response = CommentResponse::Json(Json(comments));
     let acao_header = access_control_header(origin);
     Ok((TypedHeader(acao_header), response))
 }
 
 fn access_control_header(origin: Origin) -> AccessControlAllowOrigin {
-    if origin.hostname() == "threedots.ca" || origin.hostname().ends_with(".threedots.ca") {
+    if cfg!(debug_assertions) {
+        AccessControlAllowOrigin::ANY
+    } else if origin.hostname() == "threedots.ca" || origin.hostname().ends_with(".threedots.ca") {
         AccessControlAllowOrigin::try_from(format!("{}://{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
     } else if origin.hostname() == "reverent-euclid-2bfb78.netlify.app" || origin.hostname().ends_with("--reverent-euclid-2bfb78.netlify.app") {
         AccessControlAllowOrigin::try_from(format!("{}://{}", origin.scheme(), origin.hostname()).as_str()).unwrap()
@@ -143,7 +147,7 @@ pub(crate) async fn new_comment(
     let mut conn = pool.acquire().await?;
     info!(page_url, author = comment.author.as_str(), content = comment.content.as_str());
     query("INSERT INTO pages (url) VALUES (?) ON CONFLICT (url) DO NOTHING")
-        .bind(&comment.page_url)
+        .bind(page_url)
         .execute(&mut conn).await?;
     let page_id: i64 = query("SELECT id FROM pages WHERE url = ?")
         .bind(page_url)
