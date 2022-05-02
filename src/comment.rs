@@ -1,5 +1,5 @@
 use axum::headers::{Origin, AccessControlAllowOrigin};
-use axum::response::{Html, IntoResponse};
+use axum::response::IntoResponse;
 use axum::{Extension, Json, TypedHeader};
 use axum::extract::Query;
 use axum_macros::debug_handler;
@@ -78,17 +78,12 @@ impl FromRow<'_, SqliteRow> for Comment {
     }
 }
 
-pub(crate) enum CommentResponse {
-    Json(Json<Vec<Comment>>),
-    Html(Html<String>),
-}
+pub(crate) struct CommentResponse(Json<Vec<Comment>>);
+
 
 impl IntoResponse for CommentResponse {
     fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::Json(json) => json.into_response(),
-            Self::Html(html) => html.into_response(),
-        }
+        self.0.into_response()
     }
 }
 
@@ -105,7 +100,7 @@ pub(crate) async fn list_comments(
         FROM comments JOIN pages ON comments.page_id = pages.id
         WHERE url = ?
     ").bind(page_url).fetch_all(&mut conn).await?;
-    let response = CommentResponse::Json(Json(comments));
+    let response = CommentResponse(Json(comments));
     let acao_header = access_control_header(origin);
     Ok((TypedHeader(acao_header), response))
 }
