@@ -25,3 +25,7 @@ serde = { version = "1", features = ["derive"] }
 version = "0.5"
 features = ["sqlite", "runtime-tokio-rustls", "chrono"]
 default-features = false
+
+[dependencies.uuid]
+version = "1.0.0"
+features = ["v4", "fast-rng"]

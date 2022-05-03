@@ -8,6 +8,7 @@ use serde::{Serialize, Deserialize};
 use sqlx::sqlite::{SqliteRow, SqliteValueRef, SqliteTypeInfo};
 use sqlx::{FromRow, Row, Sqlite, query_as, query, TypeInfo};
 use tracing::{instrument, info};
+use uuid::Uuid;
 
 use crate::database::Pool;
 use crate::error::Error;
@@ -18,6 +19,7 @@ pub struct Comment {
     date: DateTime<Utc>,
     content: String,
     page_url: String,
+    id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +75,7 @@ impl FromRow<'_, SqliteRow> for Comment {
             date: row.get("date"),
             content: row.get("content"),
             page_url: row.get("page_url"),
+            id: row.get("id"),
         };
         Ok(comment)
     }
@@ -96,10 +99,11 @@ pub(crate) async fn list_comments(
     let page_url = data.page_url.trim_end_matches('/');
     info!(page_url);
     let comments = query_as("
-        SELECT author, date, content, url as page_url
+        SELECT author, date, content, url as page_url, comments.id as id
         FROM comments JOIN pages ON comments.page_id = pages.id
         WHERE url = ?
-    ").bind(page_url).fetch_all(&mut conn).await?;
+    ").bind(page_url).fetch_all(&mut conn).await
+        .map_err(|err| { tracing::error!(%err); err })?;
     let response = CommentResponse(Json(comments));
     let acao_header = access_control_header(origin);
     Ok((TypedHeader(acao_header), response))
@@ -148,11 +152,14 @@ pub(crate) async fn new_comment(
         .bind(page_url)
         .fetch_one(&mut conn).await?.get(0);
     let date = Utc::now();
-    query( "INSERT INTO comments (author, date, content, page_id)
-            VALUES (?, ?, ?, ?)")
+    let mut id_buffer = [0; 36];
+    let id: &str = Uuid::new_v4().hyphenated().encode_lower(&mut id_buffer);
+    query( "INSERT INTO comments (author, date, content, page_id, id)
+            VALUES (?, ?, ?, ?, ?)")
         .bind(&comment.author).bind(&date)
         .bind(&comment.content)
         .bind(page_id)
+        .bind(id)
         .execute(&mut conn).await?;
     Ok((TypedHeader(access_control_header(origin)), ()))
 }

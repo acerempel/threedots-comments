@@ -1,4 +1,5 @@
-use sqlx::{Executor, query, Row};
+use sqlx::{Executor, query, Row, Acquire};
+use uuid::Uuid;
 
 pub type Pool = sqlx::SqlitePool;
 
@@ -27,6 +28,23 @@ pub async fn init(pool: &Pool) -> Result<(), eyre::Report> {
             ALTER TABLE comments DROP COLUMN content_type;
             PRAGMA user_version = 2;
         ").await?;
+    }
+    if version < 3 {
+        let mut txn = conn.begin().await?;
+        txn.execute("
+            ALTER TABLE comments ADD COLUMN id TEXT;
+            CREATE UNIQUE INDEX comments_id ON comments(id);
+        ").await?;
+        let rowids = txn.fetch_all("SELECT rowid FROM comments").await?;
+        for row in rowids {
+            let rowid: i64 = row.get(0);
+            let id = Uuid::new_v4().to_string();
+            query("UPDATE comments SET id = ? WHERE rowid = ?")
+                .bind(&id).bind(rowid)
+                .execute(&mut txn).await?;
+        }
+        txn.execute("PRAGMA user_version = 3;").await?;
+        txn.commit().await?;
     }
     Ok(())
 }
