@@ -1,0 +1,12 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run – dev mode",
+            "type": "shell",
+            "command": "cargo run -- --port 8000",
+            "isBackground": true,
+            "problemMatcher": []
+        }
+    ]
+}
